@@ -1,26 +1,26 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>羊年接元宝 · 纸艺冲关赢好礼</title>
+  <title>Year of the Sheep: Golden Harvest</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
     body {
       overflow: hidden;
       background: #8b1111;
-      font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
+      font-family: "Segoe UI", "PingFang SC", "Helvetica Neue", sans-serif;
       color: #fff;
     }
     canvas { display: block; width: 100vw; height: 100vh; }
 
-    /* 主持人鼠标导播台 */
+    /* 主持人中文导播台 */
     #host-panel {
       position: fixed;
       top: 14px;
       right: 16px;
-      background: rgba(35, 8, 8, 0.82);
-      border: 1.5px solid rgba(255, 215, 0, 0.45);
+      background: rgba(30, 6, 6, 0.88);
+      border: 1.5px solid rgba(255, 215, 0, 0.5);
       border-radius: 12px;
       padding: 10px 14px;
       display: flex;
@@ -29,9 +29,10 @@
       font-size: 13px;
       backdrop-filter: blur(6px);
       z-index: 100;
-      max-width: 310px;
+      max-width: 335px;
     }
-    .host-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    #host-panel.hidden { display: none; }
+    .host-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; flex-wrap: wrap; }
     .host-badge {
       padding: 2px 8px;
       border-radius: 99px;
@@ -45,7 +46,7 @@
       color: #5c0000;
       border: none;
       border-radius: 6px;
-      padding: 4px 10px;
+      padding: 4px 9px;
       font-weight: bold;
       cursor: pointer;
       font-size: 12px;
@@ -58,9 +59,14 @@
       color: #ffe4a0;
       border: 1px solid rgba(255, 215, 0, 0.35);
     }
-    .tip-text { font-size: 11px; color: #fcd34d; opacity: 0.9; line-height: 1.4; }
+    button.active-diff {
+      background: #ef4444;
+      color: #fff;
+      border: 1px solid #ffd700;
+    }
+    .tip-text { font-size: 11px; color: #fcd34d; opacity: 0.92; line-height: 1.35; }
     #diag-box {
-      background: rgba(0, 0, 0, 0.45);
+      background: rgba(0, 0, 0, 0.52);
       border-radius: 6px;
       padding: 5px 8px;
       font-family: monospace;
@@ -69,27 +75,40 @@
       line-height: 1.35;
       word-break: break-all;
     }
-    #cors-tip { font-size: 11px; color: #fca5a5; display: none; line-height: 1.4; }
+    #cors-tip { font-size: 11px; color: #fca5a5; display: none; line-height: 1.35; }
   </style>
 </head>
 <body>
 
-  <!-- 主持人鼠标控制面板 -->
+  <!-- 主持人中文控制面板 (按 H 键可随时隐藏/显示) -->
   <div id="host-panel">
     <div class="host-row">
-      <span>🎮 手柄:</span>
-      <span id="pad-status" class="host-badge disconnected">未连接 (按任意键唤醒)</span>
-    </div>
-    <div id="diag-box">诊断: 等待手柄按键信号...</div>
-    <div class="host-row">
-      <span>🕹️ 握持模式:</span>
-      <button class="secondary" onclick="cycleJoyMode()" id="mode-btn">标准双手柄 / Pro</button>
+      <span>🎮 手柄状态:</span>
+      <span id="pad-status" class="host-badge disconnected">未连接</span>
     </div>
     <div class="host-row">
-      <span>🎯 领奖分:</span>
+      <button onclick="connectWebHID()" style="width:100%; background:linear-gradient(180deg,#4ade80,#16a34a); color:#052e16;">
+        🔌 强制直连 Switch 手柄 (Mac蓝牙连上但无反应点此)
+      </button>
+    </div>
+    <div id="diag-box">信号诊断: 等待手柄输入 (也可直接用键盘 ←/→ 测试)</div>
+    <div class="host-row">
+      <span>🕹️ 握持方式:</span>
+      <button class="secondary" onclick="cycleJoyMode()" id="mode-btn">单只左手柄 (L) 横握</button>
+    </div>
+    <div class="host-row">
+      <span>🔥 难度设置:</span>
+      <div>
+        <button class="secondary" id="diff-easy" onclick="setDifficulty('EASY')">普通</button>
+        <button class="active-diff" id="diff-hard" onclick="setDifficulty('HARD')">困难</button>
+        <button class="secondary" id="diff-hell" onclick="setDifficulty('HELL')">地狱</button>
+      </div>
+    </div>
+    <div class="host-row">
+      <span>🎯 领奖目标分:</span>
       <div>
         <button class="secondary" onclick="adjustTarget(-200)">-200</button>
-        <strong id="target-display" style="color:#ffd700; margin:0 6px;">1200</strong>
+        <strong id="target-display" style="color:#ffd700; margin:0 6px;">2000</strong>
         <button class="secondary" onclick="adjustTarget(200)">+200</button>
       </div>
     </div>
@@ -100,9 +119,10 @@
         📂 导入4图
         <input type="file" id="asset-picker" accept="image/*" multiple style="display:none" onchange="handleManualFiles(this.files)" />
       </label>
+      <button class="secondary" onclick="toggleHostPanel()" title="按 H 键可重新呼出">👁️ 隐藏</button>
     </div>
-    <div id="cors-tip">⚠️ 检测到双击本地文件(file://)，若贴图有白框请点「导入4图」全选4张图；若手柄无法识别请用 localhost 打开。</div>
-    <div class="tip-text">💡 鼠标点击屏幕任意处可空投 +300 巨型元宝（键盘 ←/→ 也可保底控制）</div>
+    <div id="cors-tip">⚠️ 本地直接双击打开(file://)时，请点「导入4图」全选4张图片以完成自动抠图。</div>
+    <div class="tip-text">💡 导播技巧：鼠标点屏幕任意处可空投 +300 巨型元宝；按键盘 <b>H</b> 键可隐藏/显示本面板。</div>
   </div>
 
   <canvas id="game"></canvas>
@@ -116,8 +136,12 @@ let H = canvas.height = window.innerHeight;
 window.addEventListener('resize', () => {
   W = canvas.width = window.innerWidth;
   H = canvas.height = window.innerHeight;
-  player.y = H - 115;
+  player.y = H - 120;
 });
+
+function toggleHostPanel() {
+  document.getElementById('host-panel').classList.toggle('hidden');
+}
 
 // ================= 美术素材加载与自动贴纸去底 =================
 const assets = { bg: null, sheep: null, items: null, chest: null };
@@ -231,8 +255,9 @@ function playTone(freq, type, duration, vol = 0.15, slideTo = null) {
 const sfx = {
   coin: () => { playTone(880, 'sine', 0.12, 0.16, 1320); },
   ingot: () => { playTone(1046, 'triangle', 0.15, 0.22, 1568); setTimeout(() => playTone(1568, 'sine', 0.22, 0.16), 70); },
-  bomb: () => { playTone(140, 'sawtooth', 0.38, 0.28, 42); },
+  bomb: () => { playTone(140, 'sawtooth', 0.42, 0.3, 38); },
   dash: () => { playTone(320, 'sine', 0.1, 0.12, 620); },
+  rush: () => { playTone(587.33, 'sawtooth', 0.15, 0.14); setTimeout(() => playTone(880, 'sawtooth', 0.25, 0.16), 120); },
   unlock: () => {
     [523.25, 659.25, 783.99, 1046.50, 1318.5].forEach((f, i) => setTimeout(() => playTone(f, 'triangle', 0.3, 0.22), i * 80));
   },
@@ -241,11 +266,11 @@ const sfx = {
   }
 };
 
-// ================= 游戏状态 =================
+// ================= 游戏核心状态与难度配置 =================
 const GAME_DURATION = 30;
 let state = 'IDLE';
 let score = 0;
-let targetScore = 1200;
+let targetScore = 2000;
 let targetReached = false;
 let timeLeft = GAME_DURATION;
 let combo = 0;
@@ -255,9 +280,29 @@ let endCooldown = 0;
 let shakeTimer = 0;
 let shakeIntensity = 0;
 let chestPopTimer = 0;
+let sootFlashAlpha = 0;
+let rushAnnounced = false;
 
-// 0: 标准双手柄/Pro | 1: 单只左手柄 Joy-Con(L)横握 | 2: 单只右手柄 Joy-Con(R)横握
-let joyMode = 0;
+const DIFFICULTIES = {
+  EASY: { target: 1400, speedMult: 1.0,  spawnBase: 0.50, bombRate: 0.22, bombPenalty: -100, swayAmp: 35 },
+  HARD: { target: 2000, speedMult: 1.38, spawnBase: 0.38, bombRate: 0.33, bombPenalty: -150, swayAmp: 95 },
+  HELL: { target: 2600, speedMult: 1.68, spawnBase: 0.30, bombRate: 0.41, bombPenalty: -200, swayAmp: 145 }
+};
+let currentDiff = 'HARD';
+
+function setDifficulty(level) {
+  currentDiff = level;
+  const cfg = DIFFICULTIES[level];
+  targetScore = cfg.target;
+  document.getElementById('target-display').textContent = targetScore;
+  ['EASY', 'HARD', 'HELL'].forEach(k => {
+    const btn = document.getElementById('diff-' + k.toLowerCase());
+    btn.className = (k === level) ? 'active-diff' : 'secondary';
+  });
+}
+
+// 0: 标准双手柄/Pro | 1: 单只左手柄 (L) 横握 | 2: 单只右手柄 (R) 横握
+let joyMode = 1;
 const JOY_MODES = ['标准双手柄 / Pro', '单只左手柄 (L) 横握', '单只右手柄 (R) 横握'];
 
 function cycleJoyMode() {
@@ -266,8 +311,8 @@ function cycleJoyMode() {
 }
 
 const player = {
-  x: W / 2, y: H - 115, w: 130, h: 130,
-  speed: 820, vx: 0, stunTimer: 0, dashCooldown: 0, dashTimer: 0, facing: 1, bounceScale: 1
+  x: W / 2, y: H - 120, w: 144, h: 144,
+  speed: 860, vx: 0, stunTimer: 0, dashCooldown: 0, dashTimer: 0, facing: 1, bounceScale: 1
 };
 
 let items = [], particles = [], floatingTexts = [], spawnTimer = 0;
@@ -289,8 +334,8 @@ function unlockChest() {
   chestPopTimer = 1.2;
   sfx.unlock();
   triggerShake(0.45, 14);
-  spawnPaperConfetti(W / 2 + Math.min(270, W * 0.24), 60, 55);
-  spawnFloatingText(W / 2, H * 0.34, '🏆 黄金宝箱已开启 · 锁定奖品！', '#fde047', 42);
+  spawnPaperConfetti(W / 2 + Math.min(270, W * 0.24), 60, 60);
+  spawnFloatingText(W / 2, H * 0.34, '🏆 GOLDEN CHEST UNLOCKED · PRIZE WON!', '#fde047', 40);
 }
 
 function triggerRain() {
@@ -299,11 +344,11 @@ function triggerRain() {
   rainTimer = 5.0;
   sfx.unlock();
   triggerShake(0.3, 10);
-  spawnFloatingText(W / 2, H * 0.3, '🌧️ 羊年超级红包雨来袭！', '#ffd700', 38);
+  spawnFloatingText(W / 2, H * 0.3, '🌧️ LUCKY RED ENVELOPE RAIN!', '#ffd700', 38);
 }
 
 function resetToIdle() {
-  state = 'IDLE'; items = []; particles = []; floatingTexts = [];
+  state = 'IDLE'; items = []; particles = []; floatingTexts = []; sootFlashAlpha = 0;
 }
 
 canvas.addEventListener('mousedown', (e) => {
@@ -311,16 +356,113 @@ canvas.addEventListener('mousedown', (e) => {
   if (state === 'IDLE') { startGame(); return; }
   if (state === 'RESULT' && endCooldown <= 0) { startGame(); return; }
   if (state === 'PLAYING') {
-    items.push({ x: e.clientX, y: Math.max(80, e.clientY - 40), vy: 260, type: 'MEGA_INGOT', score: 300, radius: 48, rot: 0, rotSpeed: 1.5 });
+    items.push({
+      x: e.clientX, baseX: e.clientX, y: Math.max(80, e.clientY - 40),
+      vy: 280, type: 'MEGA_INGOT', score: 300, radius: 48,
+      rot: 0, rotSpeed: 1.5, phase: 0, swayAmp: 0, swayFreq: 0
+    });
     sfx.ingot();
     spawnPaperConfetti(e.clientX, e.clientY, 18);
   }
 });
 
-// ================= Switch 手柄完整诊断与多模式兼容 =================
+// ================= 双引擎 Switch 手柄驱动 (WebHID 底层直连 + Gamepad API) =================
+let hidDevice = null;
+let hidMoveX = 0;
+let hidAnyBtn = false;
+let hidDebugStr = '';
+
+async function connectWebHID() {
+  if (!('hid' in navigator)) {
+    alert('当前浏览器不支持 WebHID 直连，请使用最新版 Google Chrome 浏览器。');
+    return;
+  }
+  try {
+    const devices = await navigator.hid.requestDevice({
+      filters: [{ vendorId: 0x057e }] // Nintendo Switch 官方硬件 ID
+    });
+    if (!devices || devices.length === 0) return;
+    const device = devices[0];
+    if (!device.opened) await device.open();
+    hidDevice = device;
+
+    const name = (device.productName || '').toLowerCase();
+    if (name.includes('(l)')) { joyMode = 1; document.getElementById('mode-btn').textContent = JOY_MODES[1]; }
+    else if (name.includes('(r)')) { joyMode = 2; document.getElementById('mode-btn').textContent = JOY_MODES[2]; }
+
+    device.addEventListener('inputreport', handleHIDReport);
+    hidDebugStr = `WebHID已接管: ${device.productName || 'Switch手柄'}`;
+  } catch (err) {
+    console.warn('WebHID 连接取消或失败:', err);
+  }
+}
+
+if ('hid' in navigator) {
+  navigator.hid.getDevices().then(async (devices) => {
+    const nintendo = devices.find(d => d.vendorId === 0x057e);
+    if (nintendo) {
+      if (!nintendo.opened) await nintendo.open();
+      hidDevice = nintendo;
+      const name = (nintendo.productName || '').toLowerCase();
+      if (name.includes('(l)')) { joyMode = 1; document.getElementById('mode-btn').textContent = JOY_MODES[1]; }
+      else if (name.includes('(r)')) { joyMode = 2; document.getElementById('mode-btn').textContent = JOY_MODES[2]; }
+      nintendo.addEventListener('inputreport', handleHIDReport);
+      hidDebugStr = `WebHID自动重连: ${nintendo.productName || 'Switch手柄'}`;
+    }
+  }).catch(() => {});
+}
+
+function handleHIDReport(event) {
+  const { data, reportId } = event;
+  if (reportId === 0x3F && data.byteLength >= 3) {
+    const b0 = data.getUint8(0);
+    const b1 = data.getUint8(1);
+    const hat = data.getUint8(2);
+
+    hidAnyBtn = (b0 !== 0) || ((b1 & 0xDF) !== 0);
+
+    let sx = 0;
+    if (hat < 8) {
+      const isUp = (hat === 7 || hat === 0 || hat === 1);
+      const isDown = (hat === 3 || hat === 4 || hat === 5);
+      const isLeft = (hat === 5 || hat === 6 || hat === 7);
+      const isRight = (hat === 1 || hat === 2 || hat === 3);
+
+      if (joyMode === 0) { if (isLeft) sx = -1; else if (isRight) sx = 1; }
+      else if (joyMode === 1) { if (isUp) sx = -1; else if (isDown) sx = 1; }
+      else if (joyMode === 2) { if (isDown) sx = -1; else if (isUp) sx = 1; }
+    }
+    hidMoveX = sx;
+    hidDebugStr = `WebHID[0x3F] btn:${b0.toString(16)}/${b1.toString(16)} hat:${hat} -> 移动:${sx}`;
+  } else if ((reportId === 0x30 || reportId === 0x21) && data.byteLength >= 11) {
+    const b2 = data.getUint8(2);
+    const b3 = data.getUint8(3);
+    const b4 = data.getUint8(4);
+    hidAnyBtn = (b2 !== 0) || ((b3 & 0x3F) !== 0) || (b4 !== 0);
+
+    const lx = data.getUint8(5) | ((data.getUint8(6) & 0x0F) << 8);
+    const ly = (data.getUint8(6) >> 4) | (data.getUint8(7) << 4);
+    const rx = data.getUint8(8) | ((data.getUint8(9) & 0x0F) << 8);
+    const ry = (data.getUint8(9) >> 4) | (data.getUint8(10) << 4);
+
+    const useLeft = Math.abs(lx - 2048) + Math.abs(ly - 2048) > Math.abs(rx - 2048) + Math.abs(ry - 2048);
+    const rawX = ((useLeft ? lx : rx) - 2048) / 1150;
+    const rawY = ((useLeft ? ly : ry) - 2048) / 1150;
+
+    let sx = 0;
+    if (joyMode === 0) sx = Math.abs(rawX) > 0.2 ? rawX : 0;
+    else if (joyMode === 1) sx = Math.abs(rawY) > 0.2 ? -rawY : 0;
+    else if (joyMode === 2) sx = Math.abs(rawY) > 0.2 ? rawY : 0;
+
+    hidMoveX = Math.max(-1, Math.min(1, sx));
+    hidDebugStr = `WebHID[0x30] rawX:${rawX.toFixed(1)} rawY:${rawY.toFixed(1)} -> 移动:${hidMoveX.toFixed(1)}`;
+  }
+}
+
 const keys = {};
 window.addEventListener('keydown', (e) => {
   initAudio();
+  if (e.code === 'KeyH') { toggleHostPanel(); return; }
   keys[e.code] = true;
   if ((state === 'IDLE' || (state === 'RESULT' && endCooldown <= 0)) && (e.code === 'Space' || e.code === 'Enter')) startGame();
   if (state === 'PLAYING' && e.code === 'Space') triggerDash();
@@ -328,7 +470,6 @@ window.addEventListener('keydown', (e) => {
 window.addEventListener('keyup', (e) => { keys[e.code] = false; });
 
 window.addEventListener('gamepadconnected', (e) => {
-  // 自动识别单只 Joy-Con (L) 或 (R) 并切换对应横握模式
   const id = e.gamepad.id.toLowerCase();
   if (id.includes('(l)')) { joyMode = 1; document.getElementById('mode-btn').textContent = JOY_MODES[1]; }
   else if (id.includes('(r)')) { joyMode = 2; document.getElementById('mode-btn').textContent = JOY_MODES[2]; }
@@ -346,82 +487,60 @@ function readInput() {
   const badge = document.getElementById('pad-status');
   const diag = document.getElementById('diag-box');
 
-  if (!navigator.getGamepads) {
-    badge.textContent = '浏览器不支持手柄';
-    badge.className = 'host-badge disconnected';
-    diag.textContent = '诊断: 当前环境屏蔽了 Gamepad API，请用 Chrome 并通过 http://localhost 访问';
-    return moveX;
-  }
+  if (hidDevice && hidDevice.opened) {
+    badge.textContent = `已直连 (${(hidDevice.productName || 'Joy-Con').slice(0, 14)})`;
+    badge.className = 'host-badge connected';
+    if (hidMoveX !== 0) moveX = hidMoveX;
+    if (hidAnyBtn) anyBtn = true;
+    diag.textContent = hidDebugStr || 'WebHID 已就绪，请推摇杆或按键';
+  } else {
+    const pads = navigator.getGamepads ? Array.from(navigator.getGamepads()).filter(p => p && p.connected) : [];
+    if (pads.length > 0) {
+      let activePad = pads[0];
+      for (const p of pads) { if (p.buttons.some(b => b.pressed)) { activePad = p; break; } }
 
-  const pads = Array.from(navigator.getGamepads()).filter(p => p && p.connected);
-  if (pads.length === 0) {
-    badge.textContent = '未连接 (按任意键唤醒)';
-    badge.className = 'host-badge disconnected';
-    const isFile = window.location.protocol === 'file:';
-    diag.textContent = isFile
-      ? '诊断: 0个手柄。若蓝牙已连仍无反应，请用 python3 -m http.server 启动 localhost 打开'
-      : '诊断: 0个手柄。请长按手柄侧边SYNC黑圆键配对，连上后按任意键';
-    prevAnyButton = false;
-    return Math.max(-1, Math.min(1, moveX));
-  }
+      badge.textContent = `已连接 (${pads.length}个)`;
+      badge.className = 'host-badge connected';
 
-  // 优先选择当前有按键或摇杆动作的手柄
-  let activePad = pads[0];
-  for (const p of pads) {
-    if (p.buttons.some(b => b.pressed)) { activePad = p; break; }
-  }
+      const pressedIdx = [];
+      activePad.buttons.forEach((b, idx) => { if (b.pressed) pressedIdx.push(idx); });
+      if (pressedIdx.length > 0) anyBtn = true;
 
-  badge.textContent = `已连接 (${pads.length}个)`;
-  badge.className = 'host-badge connected';
+      const a0 = activePad.axes[0] ?? 0;
+      const a1 = activePad.axes[1] ?? 0;
+      const a9 = activePad.axes[9];
 
-  // 收集按下的按键编号，方便现场一眼诊断
-  const pressedIdx = [];
-  activePad.buttons.forEach((b, idx) => { if (b.pressed) pressedIdx.push(idx); });
-  anyBtn = pressedIdx.length > 0;
+      let stickX = 0;
+      if (joyMode === 0) {
+        stickX = Math.abs(a0) > 0.18 ? a0 : (Math.abs(activePad.axes[2] || 0) > 0.18 ? activePad.axes[2] : 0);
+        if (activePad.buttons[14]?.pressed) stickX = -1;
+        if (activePad.buttons[15]?.pressed) stickX = 1;
+      } else if (joyMode === 1) {
+        if (Math.abs(a1) > 0.18) stickX = a1;
+        else if (Math.abs(a0) > 0.18) stickX = -a0;
+      } else if (joyMode === 2) {
+        if (Math.abs(a1) > 0.18) stickX = -a1;
+        else if (Math.abs(a0) > 0.18) stickX = a0;
+      }
 
-  const a0 = activePad.axes[0] ?? 0;
-  const a1 = activePad.axes[1] ?? 0;
-  const a9 = activePad.axes[9]; // 单只 Joy-Con 常见苦力帽轴
+      if (stickX === 0 && typeof a9 === 'number' && a9 >= -1.05 && a9 <= 1.05) {
+        const isUp = (a9 <= -0.65 || a9 >= 0.95);
+        const isDown = (a9 >= -0.2 && a9 <= 0.5);
+        const isLeft = (a9 >= 0.35 && a9 <= 1.05);
+        const isRight = (a9 >= -0.75 && a9 <= -0.05);
+        if (joyMode === 0) { if (isLeft) stickX = -1; else if (isRight) stickX = 1; }
+        else if (joyMode === 1) { if (isUp) stickX = -1; else if (isDown) stickX = 1; }
+        else if (joyMode === 2) { if (isDown) stickX = -1; else if (isUp) stickX = 1; }
+      }
 
-  // 解析常规摇杆
-  let stickX = 0;
-  if (joyMode === 0) {
-    // 标准模式
-    stickX = Math.abs(a0) > 0.18 ? a0 : (Math.abs(activePad.axes[2] || 0) > 0.18 ? activePad.axes[2] : 0);
-    if (activePad.buttons[14]?.pressed) stickX = -1;
-    if (activePad.buttons[15]?.pressed) stickX = 1;
-  } else if (joyMode === 1) {
-    // 单只左手柄 Joy-Con (L) 横握：上下轴变左右
-    if (Math.abs(a1) > 0.18) stickX = a1;
-    else if (Math.abs(a0) > 0.18) stickX = -a0;
-  } else if (joyMode === 2) {
-    // 单只右手柄 Joy-Con (R) 横握：上下轴反向变左右
-    if (Math.abs(a1) > 0.18) stickX = -a1;
-    else if (Math.abs(a0) > 0.18) stickX = a0;
-  }
-
-  // 解析单只 Joy-Con 苦力帽 (axes[9]，静置时约为 3.28，推摇杆时在 -1 ~ +1 之间)
-  if (stickX === 0 && typeof a9 === 'number' && a9 >= -1.05 && a9 <= 1.05) {
-    const isUp = (a9 <= -0.65 || a9 >= 0.95);
-    const isDown = (a9 >= -0.2 && a9 <= 0.5);
-    const isLeft = (a9 >= 0.35 && a9 <= 1.05);
-    const isRight = (a9 >= -0.75 && a9 <= -0.05);
-
-    if (joyMode === 0) {
-      if (isLeft) stickX = -1;
-      else if (isRight) stickX = 1;
-    } else if (joyMode === 1) {
-      if (isUp) stickX = -1;
-      else if (isDown) stickX = 1;
-    } else if (joyMode === 2) {
-      if (isDown) stickX = -1;
-      else if (isUp) stickX = 1;
+      if (stickX !== 0) moveX = stickX;
+      diag.textContent = `Gamepad:${activePad.id.slice(0, 14)} | 键:[${pressedIdx.join(',')}] | a0:${a0.toFixed(1)} a1:${a1.toFixed(1)}`;
+    } else {
+      badge.textContent = '未检测到手柄';
+      badge.className = 'host-badge disconnected';
+      diag.textContent = '提示: 若Mac蓝牙已连但此处显示未检测，请点上方绿色「强制直连 Switch 手柄」按钮';
     }
   }
-
-  if (stickX !== 0) moveX = stickX;
-
-  diag.textContent = `名称:${activePad.id.slice(0, 16)} | 按键:[${pressedIdx.join(',')}] | a0:${a0.toFixed(1)} a1:${a1.toFixed(1)}${typeof a9 === 'number' ? ' hat:' + a9.toFixed(1) : ''}`;
 
   if (anyBtn && !prevAnyButton) {
     initAudio();
@@ -437,7 +556,7 @@ function readInput() {
 function triggerDash() {
   if (player.dashCooldown <= 0 && player.stunTimer <= 0) {
     player.dashTimer = 0.16;
-    player.dashCooldown = 0.65;
+    player.dashCooldown = 0.6;
     player.bounceScale = 1.25;
     sfx.dash();
     spawnPaperConfetti(player.x, player.y + 30, 12);
@@ -447,7 +566,7 @@ function triggerDash() {
 function startGame() {
   state = 'PLAYING';
   score = 0; targetReached = false; timeLeft = GAME_DURATION;
-  combo = 0; maxCombo = 0; rainTimer = 0;
+  combo = 0; maxCombo = 0; rainTimer = 0; sootFlashAlpha = 0; rushAnnounced = false;
   items = []; particles = []; floatingTexts = [];
   player.x = W / 2; player.stunTimer = 0; player.dashTimer = 0; player.bounceScale = 1;
   sfx.coin();
@@ -456,6 +575,7 @@ function startGame() {
 function finishGame() {
   state = 'RESULT';
   endCooldown = 1.5;
+  sootFlashAlpha = 0;
   if (score >= targetScore) {
     sfx.win();
     triggerShake(0.5, 12);
@@ -467,36 +587,68 @@ function finishGame() {
   }
 }
 
-// ================= 掉落物与粒子 =================
+// ================= 掉落物与高难度轨迹 =================
 function spawnItem() {
-  const margin = 95;
-  const x = margin + Math.random() * (W - margin * 2);
+  const cfg = DIFFICULTIES[currentDiff];
+  const margin = 110;
+  const baseX = margin + Math.random() * (W - margin * 2);
   const progress = 1 - timeLeft / GAME_DURATION;
-  const rotSpeed = (Math.random() - 0.5) * 3.5;
+  const isRush = timeLeft <= 10;
+  const speedScale = cfg.speedMult * (1 + progress * 0.32) * (isRush ? 1.22 : 1.0);
+  const rotSpeed = (Math.random() - 0.5) * 4.2;
 
   if (rainTimer > 0) {
     const isIngot = Math.random() < 0.35;
-    items.push({ x, y: -50, vy: 360 + Math.random() * 140, type: isIngot ? 'INGOT' : 'RED_PACKET', score: isIngot ? 150 : 50, radius: isIngot ? 36 : 32, rot: 0, rotSpeed });
+    items.push({
+      x: baseX, baseX, y: -50, vy: (380 + Math.random() * 140) * cfg.speedMult,
+      type: isIngot ? 'INGOT' : 'RED_PACKET', score: isIngot ? 150 : 50,
+      radius: isIngot ? 36 : 32, rot: 0, rotSpeed, phase: 0, swayAmp: 0, swayFreq: 0
+    });
     return;
   }
 
   const r = Math.random();
-  if (r < 0.22 + progress * 0.08) items.push({ x, y: -50, vy: 280 + progress * 150 + Math.random() * 80, type: 'BOMB', score: -100, radius: 34, rot: 0, rotSpeed });
-  else if (r < 0.42) items.push({ x, y: -50, vy: 340 + progress * 140 + Math.random() * 70, type: 'INGOT', score: 150, radius: 36, rot: 0, rotSpeed });
-  else if (r < 0.70) items.push({ x, y: -50, vy: 270 + progress * 120 + Math.random() * 60, type: 'DUMPLING', score: 80, radius: 32, rot: 0, rotSpeed });
-  else items.push({ x, y: -50, vy: 240 + progress * 120 + Math.random() * 60, type: 'RED_PACKET', score: 50, radius: 32, rot: 0, rotSpeed });
+  const bombProb = cfg.bombRate + (isRush ? 0.08 : 0);
+  const phase = Math.random() * Math.PI * 2;
+  const swayFreq = 2.2 + Math.random() * 2.0;
+
+  if (r < bombProb) {
+    items.push({
+      x: baseX, baseX, y: -50, vy: (310 + Math.random() * 110) * speedScale,
+      type: 'BOMB', score: cfg.bombPenalty, radius: 34, rot: 0, rotSpeed,
+      phase, swayAmp: cfg.swayAmp * 0.85, swayFreq
+    });
+  } else if (r < bombProb + 0.18) {
+    items.push({
+      x: baseX, baseX, y: -50, vy: (370 + Math.random() * 110) * speedScale,
+      type: 'INGOT', score: 150, radius: 36, rot: 0, rotSpeed,
+      phase, swayAmp: cfg.swayAmp * 1.15, swayFreq: swayFreq * 1.1
+    });
+  } else if (r < bombProb + 0.44) {
+    items.push({
+      x: baseX, baseX, y: -50, vy: (300 + Math.random() * 90) * speedScale,
+      type: 'DUMPLING', score: 80, radius: 32, rot: 0, rotSpeed,
+      phase, swayAmp: cfg.swayAmp * 0.5, swayFreq
+    });
+  } else {
+    items.push({
+      x: baseX, baseX, y: -50, vy: (270 + Math.random() * 85) * speedScale,
+      type: 'RED_PACKET', score: 50, radius: 32, rot: 0, rotSpeed,
+      phase, swayAmp: cfg.swayAmp * 0.35, swayFreq
+    });
+  }
 }
 
 function spawnPaperConfetti(x, y, count, isSmoke = false) {
-  const palette = isSmoke ? ['#1f2937', '#374151', '#6b7280', '#ef4444'] : ['#ffd700', '#ef4444', '#ffffff', '#fbbf24', '#f87171'];
+  const palette = isSmoke ? ['#111827', '#374151', '#6b7280', '#ef4444'] : ['#ffd700', '#ef4444', '#ffffff', '#fbbf24', '#f87171'];
   for (let i = 0; i < count; i++) {
     const angle = Math.random() * Math.PI * 2;
-    const speed = isSmoke ? (90 + Math.random() * 220) : (140 + Math.random() * 380);
+    const speed = isSmoke ? (110 + Math.random() * 250) : (140 + Math.random() * 380);
     particles.push({
       x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed - (isSmoke ? 40 : 140),
       life: 0.65 + Math.random() * 0.45, maxLife: 1.1,
       color: palette[Math.floor(Math.random() * palette.length)],
-      size: isSmoke ? (10 + Math.random() * 14) : (6 + Math.random() * 7),
+      size: isSmoke ? (12 + Math.random() * 16) : (6 + Math.random() * 7),
       shape: isSmoke ? 'circle' : (Math.random() < 0.45 ? 'star' : 'ribbon'),
       rot: Math.random() * Math.PI * 2, vRot: (Math.random() - 0.5) * 14
     });
@@ -504,7 +656,7 @@ function spawnPaperConfetti(x, y, count, isSmoke = false) {
 }
 
 function spawnFloatingText(x, y, text, color, size = 28) {
-  floatingTexts.push({ x, y, text, color, size, life: 1.05, scale: 1.35 });
+  floatingTexts.push({ x, y, text, color, size, life: 1.1, scale: 1.38 });
 }
 
 function update(dt) {
@@ -512,6 +664,7 @@ function update(dt) {
 
   if (shakeTimer > 0) shakeTimer -= dt;
   if (chestPopTimer > 0) chestPopTimer -= dt;
+  if (sootFlashAlpha > 0) sootFlashAlpha = Math.max(0, sootFlashAlpha - dt * 1.3);
   player.bounceScale += (1 - player.bounceScale) * Math.min(1, dt * 14);
 
   particles.forEach(p => { p.x += p.vx * dt; p.y += p.vy * dt; p.vy += (p.shape === 'circle' ? 120 : 480) * dt; p.rot += p.vRot * dt; p.life -= dt; });
@@ -526,39 +679,53 @@ function update(dt) {
   timeLeft -= dt;
   if (timeLeft <= 0) { timeLeft = 0; finishGame(); return; }
 
+  if (timeLeft <= 10 && !rushAnnounced) {
+    rushAnnounced = true;
+    sfx.rush();
+    triggerShake(0.35, 10);
+    spawnFloatingText(W / 2, H * 0.28, '⚡ FINAL 10s RUSH! SPEED UP! ⚡', '#fde047', 38);
+  }
+
   if (rainTimer > 0) rainTimer -= dt;
   if (player.stunTimer > 0) player.stunTimer -= dt;
   if (player.dashCooldown > 0) player.dashCooldown -= dt;
   if (player.dashTimer > 0) player.dashTimer -= dt;
 
   if (player.stunTimer <= 0) {
-    const mult = player.dashTimer > 0 ? 2.4 : 1.0;
+    const mult = player.dashTimer > 0 ? 2.45 : 1.0;
     player.vx = moveX * player.speed * mult;
     if (Math.abs(moveX) > 0.1) player.facing = moveX > 0 ? 1 : -1;
     player.x += player.vx * dt;
     player.x = Math.max(75, Math.min(W - 75, player.x));
   }
 
+  const cfg = DIFFICULTIES[currentDiff];
+  const isRush = timeLeft <= 10;
   spawnTimer -= dt;
-  const interval = rainTimer > 0 ? 0.14 : Math.max(0.28, 0.54 - (1 - timeLeft / GAME_DURATION) * 0.22);
+  const interval = rainTimer > 0 ? 0.14 : Math.max(0.18, cfg.spawnBase * (isRush ? 0.72 : 1.0));
   if (spawnTimer <= 0) { spawnItem(); spawnTimer = interval; }
 
   for (let i = items.length - 1; i >= 0; i--) {
     const it = items[i];
     it.y += it.vy * dt;
     it.rot += it.rotSpeed * dt;
+    if (it.swayAmp > 0) {
+      it.phase += it.swayFreq * dt;
+      it.x = Math.max(60, Math.min(W - 60, it.baseX + Math.sin(it.phase) * it.swayAmp));
+    }
 
-    if (Math.abs(it.x - player.x) < player.w * 0.45 + it.radius * 0.7 && Math.abs(it.y - player.y) < player.h * 0.42 + it.radius * 0.7) {
+    if (Math.abs(it.x - player.x) < player.w * 0.44 + it.radius * 0.68 && Math.abs(it.y - player.y) < player.h * 0.42 + it.radius * 0.68) {
       if (it.type === 'BOMB') {
         score = Math.max(0, score + it.score);
-        combo = 0; player.stunTimer = 0.9; player.bounceScale = 0.75;
-        sfx.bomb(); triggerShake(0.4, 18);
-        spawnPaperConfetti(it.x, it.y, 26, true);
-        spawnFloatingText(player.x, player.y - 75, '💥 炸晕啦 -100', '#ef4444', 32);
+        combo = 0; player.stunTimer = 1.05; player.bounceScale = 0.72;
+        sootFlashAlpha = 0.45;
+        sfx.bomb(); triggerShake(0.45, 22);
+        spawnPaperConfetti(it.x, it.y, 32, true);
+        spawnFloatingText(player.x, player.y - 75, `💥 STUNNED! ${it.score}`, '#ef4444', 34);
       } else {
         combo++;
         if (combo > maxCombo) maxCombo = combo;
-        const bonusMult = combo >= 10 ? 1.5 : (combo >= 5 ? 1.2 : 1.0);
+        const bonusMult = combo >= 12 ? 2.0 : (combo >= 5 ? 1.5 : 1.0);
         const gained = Math.round(it.score * bonusMult);
         score += gained;
         player.bounceScale = it.type === 'MEGA_INGOT' ? 1.32 : 1.18;
@@ -572,7 +739,7 @@ function update(dt) {
           spawnPaperConfetti(it.x, it.y, 12);
         }
 
-        const comboTag = bonusMult > 1 ? ` 🔥${combo}连击` : '';
+        const comboTag = bonusMult > 1 ? ` 🔥${combo}x COMBO!` : '';
         spawnFloatingText(player.x, player.y - 70, `+${gained}${comboTag}`, '#fde047', it.type === 'MEGA_INGOT' ? 38 : 28);
         if (!targetReached && score >= targetScore) unlockChest();
       }
@@ -608,19 +775,19 @@ function drawPlayer() {
   const tilt = isMoving ? Math.sin(Date.now() / 75) * 0.08 : 0;
 
   if (player.stunTimer > 0) {
-    ctx.translate(Math.sin(Date.now() / 22) * 10, 0);
-    ctx.rotate(Math.sin(Date.now() / 40) * 0.25);
+    ctx.translate(Math.sin(Date.now() / 22) * 11, 0);
+    ctx.rotate(Math.sin(Date.now() / 40) * 0.28);
   } else {
     ctx.translate(0, hopY);
     ctx.rotate(tilt);
   }
 
   ctx.fillStyle = 'rgba(80, 10, 10, 0.28)';
-  ctx.beginPath(); ctx.ellipse(0, 56 - hopY, 52 * player.bounceScale, 13, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(0, 62 - hopY, 56 * player.bounceScale, 14, 0, 0, Math.PI * 2); ctx.fill();
 
   ctx.scale(-player.facing * player.bounceScale, player.bounceScale);
   if (assets.sheep) ctx.drawImage(assets.sheep, -player.w / 2, -player.h / 2, player.w, player.h);
-  else { ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(0, 0, 40, 0, Math.PI * 2); ctx.fill(); }
+  else { ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(0, 0, 44, 0, Math.PI * 2); ctx.fill(); }
   ctx.restore();
 }
 
@@ -668,9 +835,9 @@ function drawParticles() {
 }
 
 function drawHUD() {
-  const barW = Math.min(520, W * 0.45), barH = 36, barX = (W - barW) / 2 - 24, barY = 26;
-  ctx.fillStyle = 'rgba(65, 10, 10, 0.72)';
-  ctx.beginPath(); ctx.roundRect(barX, barY, barW, barH, 18); ctx.fill();
+  const barW = Math.min(540, W * 0.46), barH = 38, barX = (W - barW) / 2 - 24, barY = 26;
+  ctx.fillStyle = 'rgba(65, 10, 10, 0.76)';
+  ctx.beginPath(); ctx.roundRect(barX, barY, barW, barH, 19); ctx.fill();
 
   const ratio = Math.min(1, score / targetScore);
   if (ratio > 0) {
@@ -678,19 +845,22 @@ function drawHUD() {
     grad.addColorStop(0, targetReached ? '#16a34a' : '#f59e0b');
     grad.addColorStop(1, '#fde047');
     ctx.fillStyle = grad;
-    ctx.beginPath(); ctx.roundRect(barX + 3, barY + 3, (barW - 6) * ratio, barH - 6, 15); ctx.fill();
+    ctx.beginPath(); ctx.roundRect(barX + 3, barY + 3, (barW - 6) * ratio, barH - 6, 16); ctx.fill();
   }
 
   ctx.strokeStyle = targetReached ? '#4ade80' : '#ffd700';
   ctx.lineWidth = 3;
-  ctx.beginPath(); ctx.roundRect(barX, barY, barW, barH, 18); ctx.stroke();
+  ctx.beginPath(); ctx.roundRect(barX, barY, barW, barH, 19); ctx.stroke();
 
   ctx.fillStyle = '#fff'; ctx.font = 'bold 17px sans-serif'; ctx.textAlign = 'center';
-  ctx.shadowColor = 'rgba(0,0,0,0.65)'; ctx.shadowBlur = 4;
-  ctx.fillText(targetReached ? `🎉 宝箱开启！当前 ${score} 分 (已达领奖线)` : `🎯 领奖目标：${score} / ${targetScore} 分`, barX + barW / 2, barY + 24);
+  ctx.shadowColor = 'rgba(0,0,0,0.7)'; ctx.shadowBlur = 4;
+  ctx.fillText(
+    targetReached ? `🎉 CHEST UNLOCKED! ${score} pts (Prize Secured!)` : `🎯 Prize Goal: ${score} / ${targetScore} pts`,
+    barX + barW / 2, barY + 25
+  );
   ctx.shadowBlur = 0;
 
-  const chestX = barX + barW + 38, chestY = barY + barH / 2 - 4;
+  const chestX = barX + barW + 40, chestY = barY + barH / 2 - 4;
   ctx.save();
   ctx.translate(chestX, chestY);
   if (!targetReached && ratio > 0.7) ctx.rotate(Math.sin(Date.now() / 45) * 0.14);
@@ -699,53 +869,59 @@ function drawHUD() {
 
   if (assets.chest) {
     const hw = assets.chest.width / 2, hh = assets.chest.height;
-    const drawW = 86, drawH = drawW * (hh / hw);
+    const drawW = 88, drawH = drawW * (hh / hw);
     ctx.drawImage(assets.chest, targetReached ? hw : 0, 0, hw, hh, -drawW / 2, -drawH / 2, drawW, drawH);
   }
   ctx.restore();
 
   if (state === 'PLAYING') {
-    ctx.fillStyle = timeLeft <= 5 ? '#dc2626' : '#7f1d1d';
-    ctx.beginPath(); ctx.roundRect(W / 2 - 68, barY + 46, 136, 42, 21); ctx.fill();
+    const isRush = timeLeft <= 10;
+    ctx.fillStyle = isRush ? '#dc2626' : '#7f1d1d';
+    ctx.beginPath(); ctx.roundRect(W / 2 - 74, barY + 48, 148, 42, 21); ctx.fill();
     ctx.strokeStyle = '#ffd700'; ctx.lineWidth = 2.5; ctx.stroke();
-    ctx.fillStyle = timeLeft <= 5 ? '#fecaca' : '#fde047';
+    ctx.fillStyle = isRush ? '#ffffff' : '#fde047';
     ctx.font = 'bold 28px sans-serif';
-    ctx.fillText(`⏱ ${Math.ceil(timeLeft)}s`, W / 2, barY + 77);
+    ctx.fillText(`⏱ ${Math.ceil(timeLeft)}s`, W / 2, barY + 79);
   }
 }
 
 function drawOverlay() {
   if (state === 'IDLE') {
-    ctx.fillStyle = 'rgba(45, 5, 5, 0.58)'; ctx.fillRect(0, 0, W, H);
-    ctx.textAlign = 'center'; ctx.fillStyle = '#ffd700'; ctx.font = 'bold 54px sans-serif';
-    ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = 10;
-    ctx.fillText('🐑 羊年接元宝 · 开宝箱赢好礼 🧧', W / 2, H * 0.36);
-    ctx.fillStyle = '#fff'; ctx.font = 'bold 26px sans-serif';
-    ctx.fillText(`30 秒内达到 ${targetScore} 分开启黄金宝箱，即可领取奖品！`, W / 2, H * 0.45);
+    ctx.fillStyle = 'rgba(45, 5, 5, 0.6)'; ctx.fillRect(0, 0, W, H);
+    ctx.textAlign = 'center'; ctx.fillStyle = '#ffd700'; ctx.font = 'bold 50px sans-serif';
+    ctx.shadowColor = 'rgba(0,0,0,0.65)'; ctx.shadowBlur = 10;
+    ctx.fillText('🐑 YEAR OF THE SHEEP: GOLDEN HARVEST 🧧', W / 2, H * 0.35);
+
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 25px sans-serif';
+    ctx.fillText(`Score ${targetScore} pts in 30s to unlock the Golden Chest & win a prize!`, W / 2, H * 0.44);
+
     ctx.fillStyle = '#fde047'; ctx.font = '20px sans-serif';
-    ctx.fillText('🕹️ 摇杆左右移动接元宝 · 躲开黑鞭炮 · 任意键冲刺', W / 2, H * 0.52);
+    ctx.fillText('🕹️ Stick Left/Right to Move · Dodge Black Bombs · Any Button to Dash', W / 2, H * 0.51);
     ctx.shadowBlur = 0;
 
     const pulse = 1 + Math.sin(Date.now() / 220) * 0.05;
-    ctx.save(); ctx.translate(W / 2, H * 0.64); ctx.scale(pulse, pulse);
-    ctx.fillStyle = '#ffd700'; ctx.beginPath(); ctx.roundRect(-195, -28, 390, 56, 28); ctx.fill();
-    ctx.fillStyle = '#7f1d1d'; ctx.font = 'bold 24px sans-serif';
-    ctx.fillText('按 Switch 手柄任意键开始！', 0, 9);
+    ctx.save(); ctx.translate(W / 2, H * 0.63); ctx.scale(pulse, pulse);
+    ctx.fillStyle = '#ffd700'; ctx.beginPath(); ctx.roundRect(-235, -28, 470, 56, 28); ctx.fill();
+    ctx.fillStyle = '#7f1d1d'; ctx.font = 'bold 23px sans-serif';
+    ctx.fillText('Press Any Controller Button to Start!', 0, 8);
     ctx.restore();
   }
 
   if (state === 'RESULT') {
-    ctx.fillStyle = 'rgba(35, 5, 5, 0.74)'; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = 'rgba(35, 5, 5, 0.76)'; ctx.fillRect(0, 0, W, H);
     const win = score >= targetScore;
-    ctx.textAlign = 'center'; ctx.fillStyle = win ? '#4ade80' : '#fca5a5'; ctx.font = 'bold 54px sans-serif';
-    ctx.fillText(win ? '🏆 黄金宝箱已开启 · 恭喜获得奖品！' : '🧧 差一点点 · 再接再厉！', W / 2, H * 0.34);
-    ctx.fillStyle = '#ffd700'; ctx.font = 'bold 40px sans-serif';
-    ctx.fillText(`最终得分：${score} 分  (目标：${targetScore} 分)`, W / 2, H * 0.45);
+    ctx.textAlign = 'center'; ctx.fillStyle = win ? '#4ade80' : '#fca5a5'; ctx.font = 'bold 50px sans-serif';
+    ctx.fillText(win ? '🏆 GOLDEN CHEST UNLOCKED · YOU WIN A PRIZE!' : '🧧 SO CLOSE · TRY AGAIN!', W / 2, H * 0.34);
+
+    ctx.fillStyle = '#ffd700'; ctx.font = 'bold 38px sans-serif';
+    ctx.fillText(`Final Score: ${score} pts  (Target: ${targetScore} pts)`, W / 2, H * 0.45);
+
     ctx.fillStyle = '#fde047'; ctx.font = '22px sans-serif';
-    ctx.fillText(`最高连击：${maxCombo} 连击`, W / 2, H * 0.52);
+    ctx.fillText(`Max Combo: ${maxCombo}x`, W / 2, H * 0.52);
+
     if (endCooldown <= 0) {
       ctx.fillStyle = '#fff'; ctx.font = 'bold 22px sans-serif';
-      ctx.fillText('👉 下一位同学：按手柄任意键立即开始新的一局', W / 2, H * 0.64);
+      ctx.fillText('👉 Next Player: Press Any Controller Button to Play Again', W / 2, H * 0.64);
     }
   }
 }
@@ -768,12 +944,17 @@ function loop(now) {
   drawPlayer();
   drawParticles();
 
+  if (sootFlashAlpha > 0) {
+    ctx.fillStyle = `rgba(15, 15, 20, ${sootFlashAlpha})`;
+    ctx.fillRect(0, 0, W, H);
+  }
+
   floatingTexts.forEach(f => {
     ctx.save();
     ctx.globalAlpha = Math.min(1, f.life * 1.5);
     ctx.translate(f.x, f.y); ctx.scale(f.scale, f.scale);
     ctx.fillStyle = f.color; ctx.font = `bold ${f.size}px sans-serif`; ctx.textAlign = 'center';
-    ctx.shadowColor = 'rgba(0,0,0,0.75)'; ctx.shadowBlur = 5;
+    ctx.shadowColor = 'rgba(0,0,0,0.8)'; ctx.shadowBlur = 5;
     ctx.fillText(f.text, 0, 0);
     ctx.restore();
   });
