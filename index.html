@@ -29,7 +29,7 @@
       font-size: 13px;
       backdrop-filter: blur(6px);
       z-index: 100;
-      max-width: 335px;
+      max-width: 350px;
     }
     #host-panel.hidden { display: none; }
     .host-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; flex-wrap: wrap; }
@@ -88,13 +88,14 @@
     </div>
     <div class="host-row">
       <button onclick="connectWebHID()" style="width:100%; background:linear-gradient(180deg,#4ade80,#16a34a); color:#052e16;">
-        🔌 强制直连 Switch 手柄 (Mac蓝牙连上但无反应点此)
+        🔌 强制直连 Switch 手柄 (蓝牙连上无反应点此)
       </button>
     </div>
     <div id="diag-box">信号诊断: 等待手柄输入 (也可直接用键盘 ←/→ 测试)</div>
     <div class="host-row">
-      <span>🕹️ 握持方式:</span>
+      <span>🕹️ 握持:</span>
       <button class="secondary" onclick="cycleJoyMode()" id="mode-btn">单只左手柄 (L) 横握</button>
+      <button class="secondary" onclick="toggleInvertX()" id="invert-btn">↔️ 方向: 正常</button>
     </div>
     <div class="host-row">
       <span>🔥 难度设置:</span>
@@ -102,6 +103,14 @@
         <button class="secondary" id="diff-easy" onclick="setDifficulty('EASY')">普通</button>
         <button class="active-diff" id="diff-hard" onclick="setDifficulty('HARD')">困难</button>
         <button class="secondary" id="diff-hell" onclick="setDifficulty('HELL')">地狱</button>
+      </div>
+    </div>
+    <div class="host-row">
+      <span>⬇️ 掉落速度:</span>
+      <div>
+        <button class="secondary" onclick="adjustFallSpeed(-0.2)">-0.2</button>
+        <strong id="speed-display" style="color:#ffd700; margin:0 6px;">1.0x</strong>
+        <button class="secondary" onclick="adjustFallSpeed(0.2)">+0.2</button>
       </div>
     </div>
     <div class="host-row">
@@ -136,7 +145,7 @@ let H = canvas.height = window.innerHeight;
 window.addEventListener('resize', () => {
   W = canvas.width = window.innerWidth;
   H = canvas.height = window.innerHeight;
-  player.y = H - 120;
+  player.y = H - 135;
 });
 
 function toggleHostPanel() {
@@ -282,6 +291,7 @@ let shakeIntensity = 0;
 let chestPopTimer = 0;
 let sootFlashAlpha = 0;
 let rushAnnounced = false;
+let fallSpeedMult = 1.0; // 掉落速度倍率
 
 const DIFFICULTIES = {
   EASY: { target: 1400, speedMult: 1.0,  spawnBase: 0.50, bombRate: 0.22, bombPenalty: -100, swayAmp: 35 },
@@ -301,18 +311,32 @@ function setDifficulty(level) {
   });
 }
 
+function adjustFallSpeed(delta) {
+  fallSpeedMult = Math.round(Math.max(0.4, Math.min(2.4, fallSpeedMult + delta)) * 10) / 10;
+  document.getElementById('speed-display').textContent = fallSpeedMult.toFixed(1) + 'x';
+}
+
 // 0: 标准双手柄/Pro | 1: 单只左手柄 (L) 横握 | 2: 单只右手柄 (R) 横握
 let joyMode = 1;
 const JOY_MODES = ['标准双手柄 / Pro', '单只左手柄 (L) 横握', '单只右手柄 (R) 横握'];
+let invertX = false; // 左右方向反转开关
 
 function cycleJoyMode() {
   joyMode = (joyMode + 1) % JOY_MODES.length;
   document.getElementById('mode-btn').textContent = JOY_MODES[joyMode];
 }
 
+function toggleInvertX() {
+  invertX = !invertX;
+  const btn = document.getElementById('invert-btn');
+  btn.textContent = invertX ? '↔️ 方向: 已反转' : '↔️ 方向: 正常';
+  btn.className = invertX ? 'active-diff' : 'secondary';
+}
+
+// 小羊尺寸放大 30% (144 -> 188)
 const player = {
-  x: W / 2, y: H - 120, w: 144, h: 144,
-  speed: 860, vx: 0, stunTimer: 0, dashCooldown: 0, dashTimer: 0, facing: 1, bounceScale: 1
+  x: W / 2, y: H - 135, w: 188, h: 188,
+  speed: 880, vx: 0, stunTimer: 0, dashCooldown: 0, dashTimer: 0, facing: 1, bounceScale: 1
 };
 
 let items = [], particles = [], floatingTexts = [], spawnTimer = 0;
@@ -358,7 +382,7 @@ canvas.addEventListener('mousedown', (e) => {
   if (state === 'PLAYING') {
     items.push({
       x: e.clientX, baseX: e.clientX, y: Math.max(80, e.clientY - 40),
-      vy: 280, type: 'MEGA_INGOT', score: 300, radius: 48,
+      vy: 280 * fallSpeedMult, type: 'MEGA_INGOT', score: 300, radius: 48,
       rot: 0, rotSpeed: 1.5, phase: 0, swayAmp: 0, swayFreq: 0
     });
     sfx.ingot();
@@ -379,7 +403,7 @@ async function connectWebHID() {
   }
   try {
     const devices = await navigator.hid.requestDevice({
-      filters: [{ vendorId: 0x057e }] // Nintendo Switch 官方硬件 ID
+      filters: [{ vendorId: 0x057e }]
     });
     if (!devices || devices.length === 0) return;
     const device = devices[0];
@@ -433,7 +457,7 @@ function handleHIDReport(event) {
       else if (joyMode === 2) { if (isDown) sx = -1; else if (isUp) sx = 1; }
     }
     hidMoveX = sx;
-    hidDebugStr = `WebHID[0x3F] btn:${b0.toString(16)}/${b1.toString(16)} hat:${hat} -> 移动:${sx}`;
+    hidDebugStr = `WebHID[0x3F] btn:${b0.toString(16)}/${b1.toString(16)} hat:${hat} -> 移动:${invertX ? -sx : sx}`;
   } else if ((reportId === 0x30 || reportId === 0x21) && data.byteLength >= 11) {
     const b2 = data.getUint8(2);
     const b3 = data.getUint8(3);
@@ -455,7 +479,8 @@ function handleHIDReport(event) {
     else if (joyMode === 2) sx = Math.abs(rawY) > 0.2 ? rawY : 0;
 
     hidMoveX = Math.max(-1, Math.min(1, sx));
-    hidDebugStr = `WebHID[0x30] rawX:${rawX.toFixed(1)} rawY:${rawY.toFixed(1)} -> 移动:${hidMoveX.toFixed(1)}`;
+    const finalX = invertX ? -hidMoveX : hidMoveX;
+    hidDebugStr = `WebHID[0x30] rawX:${rawX.toFixed(1)} rawY:${rawY.toFixed(1)} -> 移动:${finalX.toFixed(1)}`;
   }
 }
 
@@ -490,7 +515,8 @@ function readInput() {
   if (hidDevice && hidDevice.opened) {
     badge.textContent = `已直连 (${(hidDevice.productName || 'Joy-Con').slice(0, 14)})`;
     badge.className = 'host-badge connected';
-    if (hidMoveX !== 0) moveX = hidMoveX;
+    let cx = invertX ? -hidMoveX : hidMoveX;
+    if (cx !== 0) moveX = cx;
     if (hidAnyBtn) anyBtn = true;
     diag.textContent = hidDebugStr || 'WebHID 已就绪，请推摇杆或按键';
   } else {
@@ -533,8 +559,9 @@ function readInput() {
         else if (joyMode === 2) { if (isDown) stickX = -1; else if (isUp) stickX = 1; }
       }
 
+      if (invertX) stickX = -stickX;
       if (stickX !== 0) moveX = stickX;
-      diag.textContent = `Gamepad:${activePad.id.slice(0, 14)} | 键:[${pressedIdx.join(',')}] | a0:${a0.toFixed(1)} a1:${a1.toFixed(1)}`;
+      diag.textContent = `Gamepad:${activePad.id.slice(0, 14)} | 键:[${pressedIdx.join(',')}] | 移动:${stickX.toFixed(1)}`;
     } else {
       badge.textContent = '未检测到手柄';
       badge.className = 'host-badge disconnected';
@@ -559,7 +586,7 @@ function triggerDash() {
     player.dashCooldown = 0.6;
     player.bounceScale = 1.25;
     sfx.dash();
-    spawnPaperConfetti(player.x, player.y + 30, 12);
+    spawnPaperConfetti(player.x, player.y + 35, 12);
   }
 }
 
@@ -594,13 +621,13 @@ function spawnItem() {
   const baseX = margin + Math.random() * (W - margin * 2);
   const progress = 1 - timeLeft / GAME_DURATION;
   const isRush = timeLeft <= 10;
-  const speedScale = cfg.speedMult * (1 + progress * 0.32) * (isRush ? 1.22 : 1.0);
+  const speedScale = cfg.speedMult * fallSpeedMult * (1 + progress * 0.32) * (isRush ? 1.22 : 1.0);
   const rotSpeed = (Math.random() - 0.5) * 4.2;
 
   if (rainTimer > 0) {
     const isIngot = Math.random() < 0.35;
     items.push({
-      x: baseX, baseX, y: -50, vy: (380 + Math.random() * 140) * cfg.speedMult,
+      x: baseX, baseX, y: -50, vy: (380 + Math.random() * 140) * cfg.speedMult * fallSpeedMult,
       type: isIngot ? 'INGOT' : 'RED_PACKET', score: isIngot ? 150 : 50,
       radius: isIngot ? 36 : 32, rot: 0, rotSpeed, phase: 0, swayAmp: 0, swayFreq: 0
     });
@@ -696,13 +723,14 @@ function update(dt) {
     player.vx = moveX * player.speed * mult;
     if (Math.abs(moveX) > 0.1) player.facing = moveX > 0 ? 1 : -1;
     player.x += player.vx * dt;
-    player.x = Math.max(75, Math.min(W - 75, player.x));
+    player.x = Math.max(95, Math.min(W - 95, player.x));
   }
 
   const cfg = DIFFICULTIES[currentDiff];
   const isRush = timeLeft <= 10;
   spawnTimer -= dt;
-  const interval = rainTimer > 0 ? 0.14 : Math.max(0.18, cfg.spawnBase * (isRush ? 0.72 : 1.0));
+  const baseInterval = rainTimer > 0 ? 0.14 : Math.max(0.18, cfg.spawnBase * (isRush ? 0.72 : 1.0));
+  const interval = baseInterval / Math.max(0.6, Math.sqrt(fallSpeedMult));
   if (spawnTimer <= 0) { spawnItem(); spawnTimer = interval; }
 
   for (let i = items.length - 1; i >= 0; i--) {
@@ -714,21 +742,21 @@ function update(dt) {
       it.x = Math.max(60, Math.min(W - 60, it.baseX + Math.sin(it.phase) * it.swayAmp));
     }
 
-    if (Math.abs(it.x - player.x) < player.w * 0.44 + it.radius * 0.68 && Math.abs(it.y - player.y) < player.h * 0.42 + it.radius * 0.68) {
+    if (Math.abs(it.x - player.x) < player.w * 0.42 + it.radius * 0.65 && Math.abs(it.y - player.y) < player.h * 0.40 + it.radius * 0.65) {
       if (it.type === 'BOMB') {
         score = Math.max(0, score + it.score);
         combo = 0; player.stunTimer = 1.05; player.bounceScale = 0.72;
         sootFlashAlpha = 0.45;
         sfx.bomb(); triggerShake(0.45, 22);
         spawnPaperConfetti(it.x, it.y, 32, true);
-        spawnFloatingText(player.x, player.y - 75, `💥 STUNNED! ${it.score}`, '#ef4444', 34);
+        spawnFloatingText(player.x, player.y - 90, `💥 STUNNED! ${it.score}`, '#ef4444', 34);
       } else {
         combo++;
         if (combo > maxCombo) maxCombo = combo;
         const bonusMult = combo >= 12 ? 2.0 : (combo >= 5 ? 1.5 : 1.0);
         const gained = Math.round(it.score * bonusMult);
         score += gained;
-        player.bounceScale = it.type === 'MEGA_INGOT' ? 1.32 : 1.18;
+        player.bounceScale = it.type === 'MEGA_INGOT' ? 1.30 : 1.16;
 
         if (it.type === 'INGOT' || it.type === 'MEGA_INGOT') {
           sfx.ingot();
@@ -740,7 +768,7 @@ function update(dt) {
         }
 
         const comboTag = bonusMult > 1 ? ` 🔥${combo}x COMBO!` : '';
-        spawnFloatingText(player.x, player.y - 70, `+${gained}${comboTag}`, '#fde047', it.type === 'MEGA_INGOT' ? 38 : 28);
+        spawnFloatingText(player.x, player.y - 85, `+${gained}${comboTag}`, '#fde047', it.type === 'MEGA_INGOT' ? 38 : 28);
         if (!targetReached && score >= targetScore) unlockChest();
       }
       items.splice(i, 1);
@@ -771,23 +799,24 @@ function drawPlayer() {
   ctx.translate(player.x, player.y);
 
   const isMoving = Math.abs(player.vx) > 20 && player.stunTimer <= 0;
-  const hopY = isMoving ? -Math.abs(Math.sin(Date.now() / 75)) * 12 : 0;
+  const hopY = isMoving ? -Math.abs(Math.sin(Date.now() / 75)) * 14 : 0;
   const tilt = isMoving ? Math.sin(Date.now() / 75) * 0.08 : 0;
 
   if (player.stunTimer > 0) {
-    ctx.translate(Math.sin(Date.now() / 22) * 11, 0);
+    ctx.translate(Math.sin(Date.now() / 22) * 12, 0);
     ctx.rotate(Math.sin(Date.now() / 40) * 0.28);
   } else {
     ctx.translate(0, hopY);
     ctx.rotate(tilt);
   }
 
+  // 适配放大后小羊的舞台地面投影
   ctx.fillStyle = 'rgba(80, 10, 10, 0.28)';
-  ctx.beginPath(); ctx.ellipse(0, 62 - hopY, 56 * player.bounceScale, 14, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(0, 82 - hopY, 72 * player.bounceScale, 16, 0, 0, Math.PI * 2); ctx.fill();
 
   ctx.scale(-player.facing * player.bounceScale, player.bounceScale);
   if (assets.sheep) ctx.drawImage(assets.sheep, -player.w / 2, -player.h / 2, player.w, player.h);
-  else { ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(0, 0, 44, 0, Math.PI * 2); ctx.fill(); }
+  else { ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(0, 0, 56, 0, Math.PI * 2); ctx.fill(); }
   ctx.restore();
 }
 
